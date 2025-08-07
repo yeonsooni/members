@@ -1,9 +1,12 @@
+import 'dotenv/config'; // 이 줄을 맨 위에 추가
 import { AppServer, AppSession, ViewType } from '@mentra/sdk';
+import fs from 'fs';
+import path from 'path';
 
 
 const PACKAGE_NAME = process.env.PACKAGE_NAME ?? (() => { throw new Error('PACKAGE_NAME is not set in .env file'); })();
 const MENTRAOS_API_KEY = process.env.MENTRAOS_API_KEY ?? (() => { throw new Error('MENTRAOS_API_KEY is not set in .env file'); })();
-const PORT = parseInt(process.env.PORT || '3000');
+const PORT = parseInt(process.env.PORT || '3002');
 
 class ExampleMentraOSApp extends AppServer {
 
@@ -16,23 +19,64 @@ class ExampleMentraOSApp extends AppServer {
   }
 
   protected async onSession(session: AppSession, sessionId: string, userId: string): Promise<void> {
-    // Show welcome message
-    session.layouts.showTextWall("Example App is ready!");
+    console.log('onSession called', sessionId, userId);
 
-    // Handle real-time transcription
-    // requires microphone permission to be set in the developer console
+    const firstLine = "Accessing Members.";
+    const secondLine = "Whose profile would you like??";
+    const thirdLine = "Just say the name";
+
+    // members.json 불러오기
+    const membersPath = path.join(__dirname, '../data/members.json');
+    let members: Record<string, string> = {};
+    try {
+      members = JSON.parse(fs.readFileSync(membersPath, 'utf-8'));
+    } catch (e) {
+      console.error('Failed to load members.json:', e);
+    }
+
+    // 첫 줄만 먼저 표시
+    session.layouts.showTextWall(firstLine);
+
+    setTimeout(() => {
+      session.layouts.showTextWall(`${firstLine}\n${secondLine}`);
+    }, 1150);
+
+    setTimeout(() => {
+      const baseText = `${firstLine}\n${secondLine}\n${thirdLine}`;
+      session.layouts.showTextWall(baseText + " :");
+
+      // 검색 결과가 계속 떠 있게, durationMs를 지정하지 않음
+      const transcriptionHandler = (data: any) => {
+        if (data.isFinal) {
+          const name = data.text.trim();
+          console.log('음성 인식 결과:', name);
+          console.log(`사용자 발화: "${data.text}"`);
+          const foundKey = Object.keys(members).find(
+            k => name.replace(/\s/g, '').includes(k.replace(/\s/g, '')) ||
+                 k.replace(/\s/g, '').includes(name.replace(/\s/g, ''))
+          );
+          if (foundKey) {
+            session.layouts.showTextWall(members[foundKey], {
+              view: ViewType.MAIN
+              // durationMs를 지정하지 않으면 계속 표시됨
+            });
+          } else {
+            session.layouts.showTextWall(`No profile found for "${name}"`, {
+              view: ViewType.MAIN
+            });
+          }
+        }
+      };
+      session.events.onTranscription(transcriptionHandler);
+    }, 2300);
+
     session.events.onTranscription((data) => {
-      if (data.isFinal) {
-        session.layouts.showTextWall("You said: " + data.text, {
-          view: ViewType.MAIN,
-          durationMs: 3000
-        });
-      }
-    })
+      console.log('Transcription event fired:', data);
+    });
 
     session.events.onGlassesBattery((data) => {
       console.log('Glasses battery:', data);
-    })
+    });
   }
 }
 
