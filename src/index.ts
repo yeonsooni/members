@@ -42,15 +42,22 @@ class ExampleMentraOSApp extends AppServer {
     }, 1150);
 
     setTimeout(() => {
+      let showColon = true;
       const baseText = `${firstLine}\n${secondLine}\n${thirdLine}`;
       session.layouts.showTextWall(baseText + " :");
+      const blinkInterval = setInterval(() => {
+        showColon = !showColon;
+        session.layouts.showTextWall(baseText + (showColon ? " :" : "  "));
+      }, 500);
 
-      // 검색 결과가 계속 떠 있게, durationMs를 지정하지 않음
+      let handled = false;
       const transcriptionHandler = (data: any) => {
+        if (handled) return;
         if (data.isFinal) {
+          handled = true;
+          clearInterval(blinkInterval); // 반드시 깜빡임 멈추기!
           const name = data.text.trim();
           console.log('음성 인식 결과:', name);
-          console.log(`사용자 발화: "${data.text}"`);
           const foundKey = Object.keys(members).find(
             k => name.replace(/\s/g, '').includes(k.replace(/\s/g, '')) ||
                  k.replace(/\s/g, '').includes(name.replace(/\s/g, ''))
@@ -58,7 +65,6 @@ class ExampleMentraOSApp extends AppServer {
           if (foundKey) {
             session.layouts.showTextWall(members[foundKey], {
               view: ViewType.MAIN
-              // durationMs를 지정하지 않으면 계속 표시됨
             });
           } else {
             session.layouts.showTextWall(`No profile found for "${name}"`, {
